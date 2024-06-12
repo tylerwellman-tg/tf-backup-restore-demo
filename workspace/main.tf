@@ -87,3 +87,34 @@ module "backup" {
   instance_id = module.cluster_blue.instance_id[0]
   bucket_arn  = module.tigergraph_backups.bucket_arn
 }
+
+module "cluster_green" {
+  source                          = "../modules/cluster"
+  color                           = "green"
+  environment_tag                 = var.common_tags.Environment
+  region                          = var.region
+  machine_count                   = var.machine_count
+  ami                             = var.ami
+  instance_type                   = var.instance_type
+  vpc_id                          = module.network.vpc_id
+  node_disk_size_gb               = var.node_disk_size_gb
+  public_key                      = var.public_key
+  private_key                     = var.private_key
+  az_allocate                     = var.az_allocate
+  private_subnet_ids              = module.network.public_subnet_ids # For simplicaity, we are putting the cluster in a public subnet in this demo
+  backup_s3_bucket_name           = module.tigergraph_backups.bucket_name
+  backup_s3_bucket_arn            = module.tigergraph_backups.bucket_arn
+  license                         = var.license
+  tigergraph_packages_bucket_name = module.tigergraph_packages.bucket_name
+  tigergraph_package_name         = var.tigergraph_package_name
+  common_tags                     = var.common_tags
+  bastion_cidr_blocks             = var.bastion_cidr_blocks
+}
+
+module "restore" {
+  source      = "../modules/restore"
+  color       = "green"
+  instance_id = module.cluster_blue.instance_id[0]
+  bucket_arn  = module.tigergraph_backups.bucket_arn
+  backup_tag  = "weekly-2024-06-12T222559"
+}
