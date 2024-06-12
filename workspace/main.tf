@@ -49,12 +49,12 @@ module "generate_key_pair" {
 }
 
 module "tigergraph_packages" {
-  source = "../modules/s3"
+  source        = "../modules/s3"
   bucket_prefix = "tigergraph-packages-"
 }
 
 module "tigergraph_backups" {
-  source = "../modules/s3"
+  source        = "../modules/s3"
   bucket_prefix = "tigergraph-backups-"
 }
 
