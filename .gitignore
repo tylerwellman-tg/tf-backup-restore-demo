@@ -32,3 +32,14 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Ignore .terraform.lock.hcl
+.terraform.lock.hcl
+
+# Ignore local key files
+*.pem
+keys/*
+*key.pub
+
+# Ignore MacOS-specific files
+*.DS_Store
