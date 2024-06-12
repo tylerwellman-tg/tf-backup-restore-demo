@@ -50,6 +50,6 @@ module "generate_key_pair" {
 
 module "tigergraph_packages" {
   source = "../modules/s3"
-  bucket_prefix = "tigergraph-packages"
+  bucket_prefix = "tigergraph-packages-"
 }
 
