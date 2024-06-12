@@ -41,3 +41,9 @@ module "network" {
   private_subnets    = ["10.0.3.0/24", "10.0.4.0/24"]
 }
 
+# Generate a key pair locally to ssh into bastion host ec2 instance
+## This module runs a script locally (on the machine running Terraform) not on the resource
+## This is for demonstration purposes; always use best practices when handling keys
+module "generate_key_pair" {
+  source = "../modules/generate_key_pair"
+}
