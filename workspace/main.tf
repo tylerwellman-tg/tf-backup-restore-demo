@@ -80,3 +80,10 @@ module "cluster_blue" {
   common_tags                     = var.common_tags
   bastion_cidr_blocks             = var.bastion_cidr_blocks
 }
+
+module "backup" {
+  source      = "../modules/backup"
+  color       = "blue"
+  instance_id = module.cluster_blue.instance_id[0]
+  bucket_arn  = module.tigergraph_backups.bucket_arn
+}

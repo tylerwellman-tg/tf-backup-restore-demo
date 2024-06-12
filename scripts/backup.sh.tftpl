@@ -1,0 +1,166 @@
+#!/bin/bash
+# Set strict mode for better error handling
+set -euo pipefail
+
+# Configuration variables
+BACKUP_PATH="/home/tigergraph/backups"
+SLEEP_INTERVAL=5  # Time in seconds to wait between retries
+MAX_RETRIES=36
+BACKUP_S3_BUCKET="${bucket_arn}"
+BACKUP_TAG="weekly"
+
+# Extract bucket name from ARN
+BACKUP_S3_BUCKET_NAME=$(echo $BACKUP_S3_BUCKET | awk -F':' '{print $NF}')
+
+# Function to log messages with timestamp
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
+# Function to run commands as the tigergraph user with the correct environment
+run_as_tigergraph() {
+    sudo -i -u tigergraph bash -c "$1"
+}
+
+# Function to check services status
+check_services() {
+    log "Checking service status..."
+    local retries=0
+    local warmup_count=0
+    local max_warmup_retries=10
+    while (( retries < MAX_RETRIES )); do
+        local output=$(run_as_tigergraph "gadmin status")
+        local all_services_online=true
+        local in_warmup=false
+
+        while IFS= read -r line; do
+            if [[ "$line" =~ \| && ! "$line" =~ "Service Name" ]]; then
+                local service_name=$(echo "$line" | awk -F'|' '{print $2}' | xargs)
+                local service_status=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
+
+                if [[ "$service_status" != "Online" ]]; then
+                    all_services_online=false
+                    if [[ "$service_status" == "Warmup" ]]; then
+                        in_warmup=true
+                        warmup_count=$((warmup_count + 1))
+                    else
+                        log "ERROR: $service_name is not fully online, current status: $service_status."
+                    fi
+                fi
+            fi
+        done <<< "$output"
+
+        if [[ $all_services_online == true ]]; then
+            log "All services are online and running as expected."
+            return 0
+        elif [[ $in_warmup == true && $warmup_count -lt $max_warmup_retries ]]; then
+            log "Some services are in warmup. Waiting longer..."
+            sleep $SLEEP_INTERVAL
+        else
+            log "Not all services are online. Retrying in $SLEEP_INTERVAL seconds... (Attempt $((retries + 1))/$MAX_RETRIES)"
+            sleep $SLEEP_INTERVAL
+            warmup_count=0  # Reset warmup count for next retry cycle
+        fi
+        ((retries++))
+    done
+
+    log "Services did not recover after $MAX_RETRIES attempts."
+    return 1
+}
+
+# Function to perform the backup
+perform_backup() {
+    log "Starting full backup..."
+    local backup_output=$(run_as_tigergraph "gadmin backup create $BACKUP_TAG")
+    local backup_success=$?
+    local backup_tag=$(echo "$backup_output" | awk -F' ' '/Tag is/ {print $NF}')
+    echo "Backup output: $backup_output"
+    log "Backup success status: $backup_success"
+    log "Extracted backup tag: $backup_tag"
+
+    if [[ $backup_success -ne 0 || -z "$backup_tag" ]]; then
+        log "Failed to perform backup or extract tag."
+        return 1
+    fi
+
+    log "Data backup completed successfully with tag: $backup_tag"
+
+    # Wait for a moment to ensure system readiness for metadata backup
+    sleep 10
+    log "About to perform metadata backup with tag: $backup_tag"
+    log "Creating metadata directory"
+    mkdir -p metadata
+    
+    local meta_output
+    if ! meta_output=$(run_as_tigergraph "gadmin backup list $backup_tag --meta" 2>&1); then
+        log "Failed to export metadata for backup tag: $backup_tag. Output: $meta_output"
+        return 1
+    fi
+    log "Metadata export output: $meta_output"
+
+    log "Checking if metadata directory exists"
+    if [ ! -d "metadata" ]; then
+        log "Metadata directory does not exist"
+        return 1
+    fi
+
+    log "Moving metadata to backup path"
+    if ! mv metadata "$BACKUP_PATH/$backup_tag/metadata"; then
+        log "Failed to move metadata to backup path: $BACKUP_PATH/$backup_tag/metadata"
+        return 1
+    fi
+
+    if ! get_graph_stats "$backup_tag"; then
+        log "Failed to log graph status."
+        return 1
+    fi
+
+    log "Metadata backup completed successfully."
+
+    log "Copying backup files to S3..."
+    run_as_tigergraph "grun all 'find $BACKUP_PATH/$backup_tag -type f -exec aws s3 cp {} s3://$BACKUP_S3_BUCKET_NAME/$backup_tag/ \;'"
+    log "Backup files copied to S3 successfully."
+    return 0
+}
+
+# Function to get graph stats
+get_graph_stats() {
+    local backup_tag=$1
+    local vertex_count=0
+    local edge_count=0
+    local output=$(run_as_tigergraph "gstatusgraph")
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ Vertex\ count ]]; then
+            local v_count=$(echo "$line" | awk -F'Vertex count:' '{print $2}' | awk -F',' '{print $1}' | xargs)
+            local e_count=$(echo "$line" | awk -F'Edge count:' '{print $2}' | awk -F',' '{print $1}' | xargs)
+            ((vertex_count+=v_count))
+            ((edge_count+=e_count))
+        fi
+    done <<< "$output"
+
+    log "Vertex Count: $vertex_count"
+    log "Edge Count: $edge_count"
+
+    # Save the counts to a JSON file in the backup directory
+    cat <<EOF_validation > "$BACKUP_PATH/$backup_tag/gstatusgraph_validation.json"
+{
+    "vertex_count": $vertex_count,
+    "edge_count": $edge_count
+}
+EOF_validation
+}
+
+# Main script execution
+log "Configuring backup settings and restarting services..."
+run_as_tigergraph "gadmin config set 'System.Backup.Local.Enable' 'true'"
+run_as_tigergraph "gadmin config set 'System.Backup.Local.Path' '$BACKUP_PATH'"
+run_as_tigergraph "gadmin config apply -y"
+run_as_tigergraph "gadmin restart all -y"
+if check_services; then
+    perform_backup || exit 1
+    log "Full backup operations completed successfully."
+else
+    log "Failed to verify all services are running."
+    exit 1
+fi
