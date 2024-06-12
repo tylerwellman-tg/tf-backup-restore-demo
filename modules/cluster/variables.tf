@@ -1,24 +1,11 @@
-variable "common_tags" {
-  description = "Common tags for all resources"
-  type        = map(string)
-  default = {
-    Owner       = "tse-tyler-wellman"
-    Project     = "tf-backup-restore-demo"
-    ManagedBy   = "Terraform"
-    Environment = "demo"
-  }
+variable "environment_tag" {
+  type        = string
+  description = "The tag name for the environment."
 }
 
 variable "region" {
   type        = string
   description = "The region to deploy the cluster in."
-  default     = "us-east-1"
-}
-
-variable "environment_tag" {
-  type        = string
-  description = "The tag name for the environment."
-  default     = "Demo"
 }
 
 variable "machine_count" {
@@ -35,19 +22,16 @@ variable "ami" {
 variable "instance_type" {
   type        = string
   description = "The instance type we are provisioning."
-  default     = "m5.2xlarge"
 }
 
 variable "vpc_id" {
   type        = string
   description = "The ID of the VPC where the node's resources reside in."
-  default     = ""
 }
 
 variable "node_disk_size_gb" {
   type        = number
   description = "The size of the disk on the instance in GB."
-  default     = 120
 }
 
 variable "public_key" {
@@ -64,17 +48,36 @@ variable "private_key" {
 variable "az_allocate" {
   type        = list(string)
   description = "Specifies which availability zone the solution belongs too."
-  default     = ["0", "0", "1", "1"]
+  default     = []
 }
 
 variable "private_subnet_ids" {
   description = "List of IDs for the private subnets"
   type        = list(string)
-  default     = [""]
 }
 
-variable "license" {
-  description = "The license key provided by TigerGraph."
+variable "color" {
+  description = "The color of the cluster for blue-green deployment strategy."
+  type        = string
+}
+
+variable "bastion_cidr_blocks" {
+  type        = list(string)
+  description = "The cidr blocks of the bastion host."
+}
+
+variable "backup_s3_bucket_name" {
+  description = "The name of the S3 bucket that stores TigerGraph backup data."
+  type        = string
+}
+
+variable "backup_s3_bucket_arn" {
+  description = "The ARN of the S3 bucket that stores TigerGraph backup data."
+  type        = string
+}
+
+variable "tigergraph_packages_bucket_name" {
+  description = "The name of the s3 bucket to get TigerGraph Server software packages."
   type        = string
 }
 
@@ -84,8 +87,18 @@ variable "tigergraph_package_name" {
   default     = "tigergraph-3.9.1-offline.tar.gz"
 }
 
-variable "bastion_cidr_blocks" {
-  type        = list(string)
-  description = "The cidr blocks of the bastion host."
-  default     = ["10.0.1.0/8"]
+variable "bucket_prefix" {
+  description = "Prefix to use when creating the S3 bucket."
+  type        = string
+  default     = "backup"
+}
+
+variable "common_tags" {
+  description = "Common tags for all resources"
+  type        = map(string)
+}
+
+variable "license" {
+  description = "The license key provided by TigerGraph."
+  type        = string
 }
