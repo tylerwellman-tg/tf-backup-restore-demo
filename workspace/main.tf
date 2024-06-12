@@ -53,3 +53,8 @@ module "tigergraph_packages" {
   bucket_prefix = "tigergraph-packages-"
 }
 
+module "tigergraph_backups" {
+  source = "../modules/s3"
+  bucket_prefix = "tigergraph-backups-"
+}
+
