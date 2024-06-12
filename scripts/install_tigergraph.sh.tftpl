@@ -10,7 +10,8 @@ PRIVATE_KEY_PATH="/home/ec2-user/.ssh/private_key.pem"
 S3_BUCKET="${tigergraph_packages_bucket_name}"
 PACKAGE_NAME="${tigergraph_package_name}"
 LICENSE="${license}"
-NODE_IPS="${node_ips}"
+NODE_LIST_JSON=${node_list_json}
+PRIVATE_KEY="${private_key}"  # This should match the key name
 
 # Function to print error message and exit
 error_exit() {
@@ -52,6 +53,16 @@ create_directories() {
     chown ec2-user:ec2-user "$LOG_FILE"
     chmod 664 "$LOG_FILE"
     echo "Ensured $LOG_FILE is writable" >> $LOG_FILE
+}
+
+# Create and populate the private key file
+create_private_key() {
+    echo "Creating private key file..." >> $LOG_FILE
+    mkdir -p /home/ec2-user/.ssh
+    echo "${private_key}" > $PRIVATE_KEY_PATH
+    chmod 600 $PRIVATE_KEY_PATH
+    chown ec2-user:ec2-user $PRIVATE_KEY_PATH
+    echo "Private key file created and permissions set." >> $LOG_FILE
 }
 
 # Download TigerGraph package from S3
@@ -104,7 +115,7 @@ configure_tigergraph() {
       "Username": "tigergraph",
       "Password": "tigergraph",
       "SSHPort": 22,
-      "PrivateKeyFile": "$private_key_path",
+      "PrivateKeyFile": "$PRIVATE_KEY_PATH",
       "PublicKeyFile": ""
     },
     "RootDir": {
@@ -114,7 +125,7 @@ configure_tigergraph() {
       "TempRoot": "/home/tigergraph/tigergraph/tmp"
     },
     "License": "$LICENSE",
-    "NodeList": $(echo "$NODE_IPS" | jq -c '[.[] | {Node: .}]')
+    "NodeList": $NODE_LIST_JSON
   },
   "AdvancedConfig": {
     "ClusterConfig": {
@@ -122,13 +133,17 @@ configure_tigergraph() {
         "SudoUser": "ec2-user",
         "Method": "K",
         "P": "sudoUserPassword",
-        "K": "$private_key_path"
+        "K": "$PRIVATE_KEY_PATH"
       },
       "ReplicationFactor": 2
     }
   }
 }
 EOT
+
+    # Pretty-print the JSON
+    jq . $INSTALLATION_DIR/$extracted_dir/install_conf.json > $INSTALLATION_DIR/$extracted_dir/install_conf_pretty.json
+    mv $INSTALLATION_DIR/$extracted_dir/install_conf_pretty.json $INSTALLATION_DIR/$extracted_dir/install_conf.json
 
     # Debugging: Output the JSON to the log file
     echo "Generated install_conf.json:" >> $LOG_FILE
@@ -188,6 +203,7 @@ EOF_TIGERGRAPH
 # Main script execution
 ensure_root
 create_directories
+create_private_key
 wait_for_user_data
 download_tigergraph
 extract_package

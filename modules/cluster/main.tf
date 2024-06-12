@@ -167,7 +167,12 @@ resource "aws_instance" "node" {
   user_data = file("../scripts/user_data.sh")
 }
 
-# Create an SSM document to install and configure TigerGraph on the cluster.
+locals {
+  formatted_node_ips = [
+    for i in range(var.machine_count) : format("\"m%d: %s\"", i + 1, aws_instance.node[i].private_ip)
+  ]
+}
+
 resource "aws_ssm_document" "this" {
   name          = "install-tigergraph-on-${var.color}-cluster"
   document_type = "Command"
@@ -181,18 +186,19 @@ resource "aws_ssm_document" "this" {
         action = "aws:runShellScript",
         name   = "installTigerGraph",
         inputs = {
-          runCommand = [templatefile("../scripts/install_tigergraph.sh", {
+          runCommand = [templatefile("${path.module}/../../scripts/install_tigergraph.sh.tftpl", {
             tigergraph_packages_bucket_name = var.tigergraph_packages_bucket_name,
             tigergraph_package_name = var.tigergraph_package_name,
             license = var.license,
-            machine_count = var.machine_count,
-            node_ips = jsonencode([for i in range(var.machine_count) : aws_instance.node[i].private_ip])
+            node_list_json = jsonencode(local.formatted_node_ips),
+            private_key = var.private_key
           })]
         }
       }
     ]
   })
 }
+
 
 # Attach the created SSM document to the target EC2 instances, executing it immediately.
 resource "aws_ssm_association" "this" {
