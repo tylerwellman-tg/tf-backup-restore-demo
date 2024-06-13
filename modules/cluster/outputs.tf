@@ -23,15 +23,6 @@ output "iam_instance_profile" {
   description = "The name of the iam instance profile that the cluster will use for iam permissions."
 }
 
-# Outputs the public IP addresses of all nodes with descriptive keys
-output "node_public_ips" {
-  description = "The public IP addresses of all nodes"
-  value = {
-    for idx, instance in aws_instance.node :
-    format("m%d", idx + 1) => instance.public_ip
-  }
-}
-
 # Outputs the private IP addresses of all nodes with descriptive keys (optional)
 output "node_private_ips" {
   description = "The private IP addresses of all nodes"
@@ -41,3 +32,11 @@ output "node_private_ips" {
   }
 }
 
+# Outputs the public IP addresses of all nodes with descriptive keys (optional)
+output "node_public_ips" {
+  description = "The public IP addresses of all nodes"
+  value = {
+    for idx, instance in aws_instance.node :
+    format("m%d", idx + 1) => instance.public_ip
+  }
+}
