@@ -114,7 +114,7 @@ module "cluster_green" {
 module "restore" {
   source      = "../modules/restore"
   color       = "green"
-  instance_id = module.cluster_blue.instance_id[0]
+  instance_id = module.cluster_green.instance_id[0]
   bucket_arn  = module.tigergraph_backups.bucket_arn
-  backup_tag  = "weekly-2024-06-12T222559"
+  backup_tag  = "weekly-2024-06-19T193126"
 }

@@ -90,7 +90,7 @@ download_backup_and_metadata() {
     create_directory "$local_path"
 
     log "Downloading backup files from S3"
-    aws s3 cp "$s3_path" "$local_path" --recursive --exclude "*" --include "*.tar.lz4" --include "*.json"
+    aws s3 cp "$s3_path" "$local_path" --recursive
 
     # Log the directory structure to help debug issues with file paths
     log "Backup directory structure after S3 copy:"
@@ -104,10 +104,10 @@ restore_backup() {
     local metadata_file
 
     # Find the metadata file in the backup directory
-    metadata_file=$(find "$backup_path/metadata" -type f -name "*.json" | head -n 1)
+    metadata_file=$(find "$backup_path" -type f -name "metadata" | head -n 1)
 
     if [[ -z "$metadata_file" ]]; then
-        log "ERROR: Metadata file not found in $backup_path/metadata"
+        log "ERROR: Metadata file not found in $backup_path"
         exit 1
     fi
 
