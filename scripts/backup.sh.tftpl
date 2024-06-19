@@ -4,6 +4,7 @@ set -euo pipefail
 
 # Configuration variables
 BACKUP_PATH="/home/tigergraph/backups"
+METADATA_PATH="/home/tigergraph/metadata"
 SLEEP_INTERVAL=5  # Time in seconds to wait between retries
 MAX_RETRIES=36
 BACKUP_S3_BUCKET="${bucket_arn}"
@@ -68,6 +69,35 @@ check_services() {
     return 1
 }
 
+# Function to export metadata
+export_metadata() {
+    local backup_tag=$1
+    log "About to perform metadata backup with tag: $backup_tag"
+    local meta_output
+    if ! meta_output=$(run_as_tigergraph "gadmin backup list $backup_tag --meta" 2>&1); then
+        log "Failed to export metadata for backup tag: $backup_tag. Output: $meta_output"
+        return 1
+    fi
+    log "Metadata export output: $meta_output"
+    return 0
+}
+
+# Function to move metadata file
+move_metadata_file() {
+    local backup_tag=$1
+    if [ ! -f "$METADATA_PATH" ]; then
+        log "Metadata file not found after export."
+        return 1
+    fi
+
+    log "Moving metadata to backup path"
+    if ! mv "$METADATA_PATH" "$BACKUP_PATH/$backup_tag/"; then
+        log "Failed to move metadata to backup path: $BACKUP_PATH/$backup_tag/"
+        return 1
+    fi
+    return 0
+}
+
 # Function to perform the backup
 perform_backup() {
     log "Starting full backup..."
@@ -87,18 +117,12 @@ perform_backup() {
 
     # Wait for a moment to ensure system readiness for metadata backup
     sleep 10
-    log "About to perform metadata backup with tag: $backup_tag"
 
-    local meta_output
-    if ! meta_output=$(run_as_tigergraph "gadmin backup list $backup_tag --meta" 2>&1); then
-        log "Failed to export metadata for backup tag: $backup_tag. Output: $meta_output"
+    if ! export_metadata "$backup_tag"; then
         return 1
     fi
-    log "Metadata export output: $meta_output"
 
-    log "Moving metadata to backup path"
-    if ! mv metadata "$BACKUP_PATH/$backup_tag/"; then
-        log "Failed to move metadata to backup path: $BACKUP_PATH/$backup_tag/"
+    if ! move_metadata_file "$backup_tag"; then
         return 1
     fi
 
