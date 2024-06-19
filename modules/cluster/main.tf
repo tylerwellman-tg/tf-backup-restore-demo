@@ -188,10 +188,10 @@ resource "aws_ssm_document" "this" {
         inputs = {
           runCommand = [templatefile("${path.module}/../../scripts/install_tigergraph.sh.tftpl", {
             tigergraph_packages_bucket_name = var.tigergraph_packages_bucket_name,
-            tigergraph_package_name = var.tigergraph_package_name,
-            license = var.license,
-            node_list_json = jsonencode(local.formatted_node_ips),
-            private_key = var.private_key
+            tigergraph_package_name         = var.tigergraph_package_name,
+            license                         = var.license,
+            node_list_json                  = jsonencode(local.formatted_node_ips),
+            private_key                     = var.private_key
           })]
         }
       }
