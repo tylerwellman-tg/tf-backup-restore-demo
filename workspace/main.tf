@@ -4,10 +4,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~>5.26.0"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = ">= 2.23.0"
-    }
   }
 
   # Store terraform state in S3 bucket
