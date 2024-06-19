@@ -39,23 +39,24 @@ create_directory() {
 check_services() {
     log "Checking service status..."
     local retries=0
-
+    local warmup_count=0
+    local max_warmup_retries=10
     while (( retries < MAX_RETRIES )); do
-        local output
-        output=$(run_as_tigergraph "gadmin status")
+        local output=$(run_as_tigergraph "gadmin status")
         local all_services_online=true
+        local in_warmup=false
 
         while IFS= read -r line; do
             if [[ "$line" =~ \| && ! "$line" =~ "Service Name" ]]; then
-                local service_name service_status
-                service_name=$(echo "$line" | awk -F'|' '{print $2}' | xargs)
-                service_status=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
+                local service_name=$(echo "$line" | awk -F'|' '{print $2}' | xargs)
+                local service_status=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
 
                 if [[ "$service_status" != "Online" ]]; then
-                    if [[ "$service_status" == "Warmup" && ( "$service_name" == "GPE" || "$service_name" == "GSE" ) ]]; then
-                        log "$service_name is in Warmup state, which is expected."
+                    all_services_online=false
+                    if [[ "$service_status" == "Warmup" ]]; then
+                        in_warmup=true
+                        warmup_count=$((warmup_count + 1))
                     else
-                        all_services_online=false
                         log "ERROR: $service_name is not fully online, current status: $service_status."
                     fi
                 fi
@@ -63,16 +64,20 @@ check_services() {
         done <<< "$output"
 
         if [[ $all_services_online == true ]]; then
-            log "All services are online or in expected Warmup state. Proceeding with the restore process."
+            log "All services are online and running as expected."
             return 0
+        elif [[ $in_warmup == true && $warmup_count -lt $max_warmup_retries ]]; then
+            log "Some services are in warmup. Waiting longer..."
+            sleep $SLEEP_INTERVAL
         else
             log "Not all services are online. Retrying in $SLEEP_INTERVAL seconds... (Attempt $((retries + 1))/$MAX_RETRIES)"
             sleep $SLEEP_INTERVAL
+            warmup_count=0  # Reset warmup count for next retry cycle
         fi
         ((retries++))
     done
 
-    log "Services did not reach the expected state after $MAX_RETRIES attempts."
+    log "Services did not recover after $MAX_RETRIES attempts."
     return 1
 }
 
@@ -99,15 +104,15 @@ restore_backup() {
     local metadata_file
 
     # Find the metadata file in the backup directory
-    metadata_file=$(find "$backup_path" -type f -name "*.json" | head -n 1)
+    metadata_file=$(find "$backup_path/metadata" -type f -name "*.json" | head -n 1)
 
     if [[ -z "$metadata_file" ]]; then
-        log "ERROR: Metadata file not found in $backup_path"
+        log "ERROR: Metadata file not found in $backup_path/metadata"
         exit 1
     fi
 
     log "Starting restore process from backup tag: $backup_tag with metadata file: $metadata_file"
-    run_as_tigergraph "gadmin backup restore --meta=$metadata_file"
+    echo "y" | run_as_tigergraph "gadmin backup restore --meta=$metadata_file"
     log "Restore process completed successfully."
 
     log "Restarting TigerGraph services..."
@@ -150,12 +155,12 @@ get_graph_stats() {
     log "Edge Count: $edge_count"
 
     # Save the counts to a JSON file in the output directory
-    cat <<EOF_validation > "$output_dir/gstatusgraph_validation.json"
+    cat <<EOF > "$output_dir/gstatusgraph_validation.json"
 {
     "vertex_count": $vertex_count,
     "edge_count": $edge_count
 }
-EOF_validation
+EOF
 }
 
 # Function to compare graph stats
@@ -163,6 +168,7 @@ compare_graph_stats() {
     local backup_tag=$1
     local backup_stats="$BACKUP_PATH/$backup_tag/gstatusgraph_validation.json"
     local restore_stats_dir="$BACKUP_PATH/$backup_tag/restore_validation"
+    create_directory "$restore_stats_dir"
     local restore_stats="$restore_stats_dir/gstatusgraph_validation.json"
 
     log "Fetching current graph stats for comparison..."
