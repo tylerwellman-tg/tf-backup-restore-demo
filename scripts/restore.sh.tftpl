@@ -20,7 +20,7 @@ RESTORE_S3_BUCKET_NAME=$(echo "$RESTORE_S3_BUCKET" | awk -F':' '{print $NF}')
 
 # Function to log messages with timestamp
 log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a ~/tigergraph_restore.log
 }
 
 # Function to run commands as the tigergraph user with the correct environment
@@ -132,8 +132,7 @@ validate_services() {
 
 # Function to get graph stats
 get_graph_stats() {
-    local output_tag=$1
-    local output_dir="$BACKUP_PATH/$output_tag"
+    local output_dir=$1
     create_directory "$output_dir"
 
     local vertex_count=0
@@ -172,7 +171,7 @@ compare_graph_stats() {
     local restore_stats="$restore_stats_dir/gstatusgraph_validation.json"
 
     log "Fetching current graph stats for comparison..."
-    get_graph_stats "restore_validation"
+    get_graph_stats "$restore_stats_dir"
 
     if diff "$backup_stats" "$restore_stats"; then
         log "Graph stats match the backup validation."
